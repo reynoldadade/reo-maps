@@ -1,6 +1,7 @@
 <script>
 import mapboxgl from "mapbox-gl";
-import distance from "@turf/distance";
+import getDistance from "@turf/distance";
+import _ from "lodash";
 import {
   uniqueNamesGenerator,
   adjectives,
@@ -41,43 +42,68 @@ export default {
     });
   },
   computed: {
-    methods: {
-      createCoordinates(coords) {
-        const { lng, lat } = coords;
-        const el = document.createElement("div");
-        el.className = "marker";
+    groupCordinates() {
+      let coordinateCopy = [...this.coordinates];
+      let groups = [];
 
-        const marker = new mapboxgl.Marker(el)
-          .setLngLat([lng, lat])
-          .addTo(this.map);
-        this.coordinates.push({
-          lng,
-          lat,
-          name: uniqueNamesGenerator({
-            dictionaries: [adjectives, animals],
-            separator: " ",
-          }),
-          marker,
-        });
-        this.calculateMaxDistance(coords);
-      },
-      threeDp(value) {
-        //3 decimal places
-        return value.toFixed(3);
-      },
-      calculateMaxDistance(point) {
-        //calculate distance between coord and each existing point for max distance
-        const { lng, lat } = point;
-        let maxDistance = 0;
-        this.coordinates.forEach((coord) => {
-          const distance = distance([lng, lat], [coord.lng, coord.lat]);
-
-          if (distance > maxDistance) {
-            maxDistance = distance;
+      // loop through the coordinates and group them by distance
+      for (let i = 0; i < coordinateCopy.length; i++) {
+        const group = [];
+        for (let j = 0; j < coordinateCopy.length; j++) {
+          const distance = getDistance(
+            [coordinateCopy[i].lng, coordinateCopy[i].lat],
+            [coordinateCopy[j].lng, coordinateCopy[j].lat]
+          );
+          // if less than max distance then add to a group
+          if (distance <= this.maxDistance) {
+            group.push(coordinateCopy[j]);
           }
-        });
-        this.maxDistance = maxDistance * 0.25;
-      },
+        }
+        // if not empty add to groups
+        if (group.length > 0) {
+          groups.push(group.sort((a, b) => a.name - b.name));
+        }
+      }
+      return finalArray;
+    },
+  },
+  methods: {
+    createCoordinates(coords) {
+      const { lng, lat } = coords;
+      const el = document.createElement("div");
+      el.className = "marker";
+
+      const marker = new mapboxgl.Marker(el)
+        .setLngLat([lng, lat])
+        .addTo(this.map);
+      this.coordinates.push({
+        lng,
+        lat,
+        name: uniqueNamesGenerator({
+          dictionaries: [adjectives, animals],
+          separator: " ",
+        }),
+        marker,
+      });
+
+      this.calculateMaxDistance(coords);
+    },
+    threeDp(value) {
+      //3 decimal places
+      return value.toFixed(3);
+    },
+    calculateMaxDistance(point) {
+      //calculate distance between coord and each existing point for max distance
+      const { lng, lat } = point;
+      let maxDistance = 0;
+      this.coordinates.forEach((coord) => {
+        const distance = getDistance([lng, lat], [coord.lng, coord.lat]);
+
+        if (distance > maxDistance) {
+          maxDistance = distance;
+        }
+      });
+      this.maxDistance = maxDistance * 0.25;
     },
   },
 };
