@@ -1,7 +1,7 @@
 <script>
 import mapboxgl from "mapbox-gl";
 import getDistance from "@turf/distance";
-import _ from "lodash";
+
 import {
   uniqueNamesGenerator,
   adjectives,
@@ -61,10 +61,20 @@ export default {
         }
         // if not empty add to groups
         if (group.length > 0) {
-          groups.push(group.sort((a, b) => a.name - b.name));
+          // issue with what i have now is that there will be duplicates
+          group.sort((a, b) => a.name - b.name);
+          const groupObject = {
+            name: group.map((item) => item.name).toString(),
+            group,
+          };
+          //before pushing check if array already exists in groups
+          const exists = groups.find((item) => item.name === groupObject.name);
+          if (!exists) {
+            groups.push(groupObject);
+          }
         }
       }
-      return finalArray;
+      return groups;
     },
   },
   methods: {
