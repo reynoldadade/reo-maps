@@ -2,27 +2,18 @@
 import { watch, ref, computed, onMounted } from "vue";
 import mapboxgl from "mapbox-gl";
 import getDistance from "@turf/distance";
+
 import {
   uniqueNamesGenerator,
   adjectives,
   animals,
 } from "unique-names-generator";
+import { polygon } from "@turf/helpers";
 
 const map = ref(null);
 const coordinates = ref([]);
 const maxDistance = ref(0);
 const groupColors = ref([]);
-
-watch(
-  coordinates,
-  (newCoordinates) => {
-    if (newCoordinates.length > 8) {
-      generateColors(groupCordinates.value);
-      drawLines(groupCordinates.value);
-    }
-  },
-  { deep: true }
-);
 
 function createCoordinates(coords) {
   const { lng, lat } = coords;
@@ -67,7 +58,6 @@ function randomColor() {
 }
 
 function generateColors(group) {
-  console.log(group);
   if (groupColors.value.length > group.length) {
     groupColors.value.splice(
       group.length,
@@ -93,29 +83,31 @@ function generateMapLines(groupCordinates) {
   const mapLines = [];
   groupCordinates.forEach((coords) => {
     const { group } = coords;
-    console.log(group);
-    const line = {
-      type: "Feature",
-      geometry: {
-        type: "Polygon",
-        coordinates: [group.map((coord) => [coord.lng, coord.lat])],
-      },
-    };
-
-    mapLines.push(line);
+    mapLines.push([
+      ...group.map((coord) => [coord.lng, coord.lat]),
+      [group[0].lng, group[0].lat],
+    ]);
   });
-  return mapLines;
+
+  return mapLines
+    .filter((item) => item.length > 3)
+    .map((item) => polygon([item]));
 }
 
 function drawLines(groupCordinates) {
   const mapLines = generateMapLines(groupCordinates);
 
+  const source = {
+    type: "FeatureCollection",
+    features: mapLines,
+  };
+
+  if (map.value.getSource("lines")) {
+    return map.value.getSource("lines").setData(source);
+  }
   map.value.addSource("lines", {
     type: "geojson",
-    data: {
-      type: "FeatureCollection",
-      features: mapLines,
-    },
+    data: source,
   });
   map.value.addLayer({
     id: "lines",
@@ -128,7 +120,10 @@ function drawLines(groupCordinates) {
   });
 }
 
-// computed properties
+function createSourceAndLayer(mapLine){
+
+},
+
 const groupCordinates = computed(() => {
   let coordinateCopy = [...coordinates.value];
   if (coordinateCopy.length === 0) {
@@ -196,6 +191,19 @@ onMounted(() => {
     createCoordinates(coords);
   });
 });
+
+//watchers
+
+watch(
+  () => groupCordinates.value,
+  (newCoordinates) => {
+    // if coordinate become more than 9 generate group colors and draw lines
+    if (newCoordinates.length > 1) {
+      generateColors(newCoordinates);
+      drawLines(newCoordinates);
+    }
+  }
+);
 </script>
 
 <script>
@@ -222,7 +230,7 @@ export default {
         <div class="h-[579px] overflow-y-auto">
           <div
             v-for="(coord, index) in groupCordinates"
-            :key="index"
+            :key="index + coord.name"
             class="mb-4"
           >
             <button class="flex items-center gap-1" @click="changeColor(index)">
