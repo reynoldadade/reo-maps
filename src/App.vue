@@ -94,6 +94,17 @@ function changeColor(index) {
     "line-color",
     color
   );
+
+  // need points to place the markers
+  const points = Layers.value[index].points;
+
+  // change Marker color
+  const Marker = Layers.value[index].marker.map((marker, index) => {
+    marker.remove();
+    return createMarker(color, points[index]);
+  });
+
+  Layers.value[index].marker = Marker;
 }
 
 // form array to be used for mapbox layers
@@ -102,12 +113,10 @@ function generateMapLines(groupCordinates) {
   const mapLines = [];
   groupCordinates.forEach((coords) => {
     const { group, name } = coords;
+    const points = group.map((coord) => [coord.lng, coord.lat]);
     // you append first coord to the other coords to close the polygon
-    const polygonCoords = [
-      ...group.map((coord) => [coord.lng, coord.lat]),
-      [group[0].lng, group[0].lat],
-    ];
-    mapLines.push({ polygonCoords, name });
+    const polygonCoords = [...points, points[0]];
+    mapLines.push({ polygonCoords, name, points });
   });
 
   return (
@@ -117,8 +126,17 @@ function generateMapLines(groupCordinates) {
       .map((item) => ({
         name: item.name,
         polygonCoords: polygon([item.polygonCoords]),
+        points: item.points,
       }))
   );
+}
+
+function createMarker(color, lngLat) {
+  const el = document.createElement("div");
+  el.className = "marker";
+  el.style.border = `4px solid ${color}`;
+
+  return new mapboxgl.Marker(el).setLngLat(lngLat).addTo(map.value);
 }
 
 function drawLines(groupCordinates) {
@@ -127,7 +145,12 @@ function drawLines(groupCordinates) {
 
   mapLines.forEach((line, index) => {
     // get line data
-    const { polygonCoords, name } = line;
+    const { polygonCoords, name, points } = line;
+
+    const marker = points.map((point) => {
+      // create marker
+      return createMarker(groupColors.value[index], point);
+    });
     // add polygoncoords as source
     const source = polygonCoords;
     // check if source exists then update data
@@ -166,23 +189,23 @@ function drawLines(groupCordinates) {
     //add fill layer to map
     map.value.addLayer(fillLayer);
     //push details into layers so you can track
-    Layers.value.push({ name, linelayer, fillLayer });
+    Layers.value.push({ name, linelayer, fillLayer, marker, points });
   });
 }
 
 const groupCordinates = computed(() => {
   let coordinateCopy = [...coordinates.value];
-  if (coordinateCopy.length === 0) {
-    return [];
-  }
-  if ((coordinateCopy.length > 0) & (coordinateCopy.length < 9)) {
-    return [
-      {
-        name: "",
-        group: coordinateCopy,
-      },
-    ];
-  }
+  // if (coordinateCopy.length === 0) {
+  //   return [];
+  // }
+  // if ((coordinateCopy.length > 0) & (coordinateCopy.length < 9)) {
+  //   return [
+  //     {
+  //       name: "",
+  //       group: coordinateCopy,
+  //     },
+  //   ];
+  // }
   let groups = [];
 
   // loop through the coordinates and group them by distance
@@ -217,6 +240,23 @@ const groupCordinates = computed(() => {
   return groups;
 });
 
+//grouped items
+
+const groupedPoints = computed(() => {
+  return groupCordinates.value.filter((item) => item.group.length >= 2);
+});
+
+const ungroupedPoints = computed(() => {
+  const group = groupCordinates.value
+    .filter((item) => item.group.length < 2)
+    .flatMap((item) => item.group);
+
+  return {
+    name: "Ungrouped",
+    group,
+  };
+});
+
 function threeDp(value) {
   return value.toFixed(3);
 }
@@ -234,6 +274,7 @@ function clearPoint() {
     map.value.removeLayer(`${layer.name}-line`);
     map.value.removeLayer(`${layer.name}-fill`);
     map.value.removeSource(layer.name);
+    layer.marker.forEach((point) => point.remove());
   });
 }
 
@@ -257,7 +298,7 @@ onMounted(() => {
 //watchers
 
 watch(
-  () => groupCordinates.value,
+  () => groupedPoints.value,
   (newCoordinates) => {
     // if coordinate become more than 9 generate group colors and draw lines
     if (newCoordinates.length > 1) {
@@ -291,7 +332,7 @@ export default {
         <div class="mb-[14px] text-[20px] leading-[24px]">Groups</div>
         <div class="h-[579px] overflow-y-auto">
           <div
-            v-for="(coord, index) in groupCordinates"
+            v-for="(coord, index) in groupedPoints"
             :key="index + coord.name"
             class="mb-4"
           >
@@ -302,11 +343,9 @@ export default {
               <div
                 class="h-3 w-3 rounded-[2px]"
                 :style="`background-color: ${groupColors[index]}`"
-                v-if="coord.name"
+                v-if="coord.name !== 'Ungrouped'"
               ></div>
-              <div class="flex h-full items-center pt-1">
-                {{ coord.name ? "Group" : "Ungrouped" }}
-              </div>
+              <div class="flex h-full items-center pt-1">Group</div>
             </button>
             <div v-for="group in coord.group" :key="group.name">
               <span>
