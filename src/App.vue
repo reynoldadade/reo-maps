@@ -14,6 +14,7 @@ const map = ref(null);
 const coordinates = ref([]);
 const maxDistance = ref(0);
 const groupColors = ref([]);
+const Layers = ref([]);
 
 function createCoordinates(coords) {
   const { lng, lat } = coords;
@@ -120,9 +121,7 @@ function drawLines(groupCordinates) {
   });
 }
 
-function createSourceAndLayer(mapLine){
-
-},
+// function createSourceAndLayer(mapLine) {}
 
 const groupCordinates = computed(() => {
   let coordinateCopy = [...coordinates.value];
