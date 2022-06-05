@@ -17,6 +17,7 @@
     "lodash": "^4.17.21",
     "mapbox-gl": "^2.8.2",
     "pinia": "^2.0.14",
+    "randomcolor": "^0.6.2",
     "unique-names-generator": "^4.7.1",
     "vue": "^3.2.36"
   },

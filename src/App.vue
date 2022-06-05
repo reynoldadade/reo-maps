@@ -2,6 +2,7 @@
 import { watch, ref, computed, onMounted } from "vue";
 import mapboxgl from "mapbox-gl";
 import getDistance from "@turf/distance";
+import randomColor from "randomcolor";
 
 import {
   uniqueNamesGenerator,
@@ -35,10 +36,7 @@ function createCoordinates(coords) {
   calculateMaxDistance(coords);
 }
 
-// function threeDp(item) {
-//   //3 decimal places
-//   return item.value.toFixed(3);
-// }
+// calculate farthest distanct point
 
 function calculateMaxDistance(point) {
   //calculate distance between coord and each existing point for max distance
@@ -54,9 +52,12 @@ function calculateMaxDistance(point) {
   maxDistance.value = max * 0.25;
 }
 
-function randomColor() {
-  return "#" + Math.floor(Math.random() * 16777215).toString(16);
-}
+// generate a random color
+// function randomColor() {
+//   return "#" + Math.floor(Math.random() * 16777215).toString(16);
+// }
+
+// generate colors according to number of groups
 
 function generateColors(group) {
   if (groupColors.value.length > group.length) {
@@ -72,56 +73,102 @@ function generateColors(group) {
   }
 }
 
+// click to change the color of a group
 function changeColor(index) {
-  const randomColor = randomColor();
-  if (groupColors.value.includes(randomColor)) {
+  const color = randomColor();
+  if (groupColors.value.includes(color)) {
     return changeColor(index);
   }
-  groupColors.value[index] = randomColor;
+  groupColors.value[index] = color;
+
+  //change fill color
+  map.value.setPaintProperty(
+    `${Layers.value[index].name}-fill`,
+    "fill-color",
+    color
+  );
+
+  //change line color
+  map.value.setPaintProperty(
+    `${Layers.value[index].name}-line`,
+    "line-color",
+    color
+  );
 }
+
+// form array to be used for mapbox layers
 
 function generateMapLines(groupCordinates) {
   const mapLines = [];
   groupCordinates.forEach((coords) => {
-    const { group } = coords;
-    mapLines.push([
+    const { group, name } = coords;
+    // you append first coord to the other coords to close the polygon
+    const polygonCoords = [
       ...group.map((coord) => [coord.lng, coord.lat]),
       [group[0].lng, group[0].lat],
-    ]);
+    ];
+    mapLines.push({ polygonCoords, name });
   });
 
-  return mapLines
-    .filter((item) => item.length > 3)
-    .map((item) => polygon([item]));
+  return (
+    mapLines
+      // we filter becuase you can form any shape without at least 4 points
+      .filter((item) => item.polygonCoords.length > 3)
+      .map((item) => ({
+        name: item.name,
+        polygonCoords: polygon([item.polygonCoords]),
+      }))
+  );
 }
 
 function drawLines(groupCordinates) {
   const mapLines = generateMapLines(groupCordinates);
+  // loop though each group and draw the lines
 
-  const source = {
-    type: "FeatureCollection",
-    features: mapLines,
-  };
+  mapLines.forEach((line, index) => {
+    // get line data
+    const { polygonCoords, name } = line;
+    // add polygoncoords as source
+    const source = polygonCoords;
+    // check if source exists then update data
+    if (map.value.getSource(name)) {
+      return map.value.getSource(name).setData(source);
+    }
+    // add source to map
+    map.value.addSource(name, {
+      type: "geojson",
+      data: source,
+    });
 
-  if (map.value.getSource("lines")) {
-    return map.value.getSource("lines").setData(source);
-  }
-  map.value.addSource("lines", {
-    type: "geojson",
-    data: source,
-  });
-  map.value.addLayer({
-    id: "lines",
-    type: "line",
-    source: "lines",
-    paint: {
-      "line-width": 2,
-      "line-color": "#000",
-    },
+    //create layer
+    const linelayer = {
+      id: `${name}-line`,
+      type: "line",
+      source: name,
+      paint: {
+        "line-width": 2,
+        "line-color": groupColors.value[index],
+      },
+    };
+
+    const fillLayer = {
+      id: `${name}-fill`,
+      type: "fill",
+      source: name,
+      paint: {
+        "fill-color": groupColors.value[index],
+        "fill-opacity": 0.4,
+      },
+    };
+    // add line layer
+    map.value.addLayer(linelayer);
+
+    //add fill layer to map
+    map.value.addLayer(fillLayer);
+    //push details into layers so you can track
+    Layers.value.push({ name, linelayer, fillLayer });
   });
 }
-
-// function createSourceAndLayer(mapLine) {}
 
 const groupCordinates = computed(() => {
   let coordinateCopy = [...coordinates.value];
@@ -172,6 +219,22 @@ const groupCordinates = computed(() => {
 
 function threeDp(value) {
   return value.toFixed(3);
+}
+
+function clearPoint() {
+  // clear markers
+  coordinates.value.forEach((item) => {
+    item.marker.remove();
+  });
+  //clear coordinates
+  coordinates.value = [];
+
+  //remove source
+  Layers.value.forEach((layer) => {
+    map.value.removeLayer(`${layer.name}-line`);
+    map.value.removeLayer(`${layer.name}-fill`);
+    map.value.removeSource(layer.name);
+  });
 }
 
 onMounted(() => {
@@ -232,7 +295,10 @@ export default {
             :key="index + coord.name"
             class="mb-4"
           >
-            <button class="flex items-center gap-1" @click="changeColor(index)">
+            <button
+              class="flex items-center gap-1 hover:bg-gray-200 p-1 rounded"
+              @click="changeColor(index)"
+            >
               <div
                 class="h-3 w-3 rounded-[2px]"
                 :style="`background-color: ${groupColors[index]}`"
@@ -258,6 +324,7 @@ export default {
         <button
           class="px-4 py-[6.5px] rounded text-[#2265F1]"
           id="clearPointsButton"
+          @click="clearPoint"
         >
           Clear points
         </button>
