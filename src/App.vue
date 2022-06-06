@@ -62,15 +62,15 @@ function calculateMaxDistance(point) {
 // generate colors according to number of groups
 
 function generateColors(group) {
-  if (groupColors.value.length > group.length) {
-    groupColors.value.splice(
-      group.length,
-      groupColors.value.length - group.length
-    );
-  } else {
+  if (groupColors.value.length < group.length) {
     const diff = group.length - groupColors.value.length;
     for (let i = 0; i < diff; i++) {
-      groupColors.value.push(randomColor());
+      const color = randomColor();
+      if (!groupColors.value.includes(color)) {
+        groupColors.value.push(color);
+      } else {
+        generateColors(group);
+      }
     }
   }
 }
@@ -102,9 +102,9 @@ function changeColor({ index, length }) {
     const points = PolygonLayers.value[index].points;
 
     // change Marker color
-    const Marker = PolygonLayers.value[index].marker.map((marker, index) => {
+    const Marker = PolygonLayers.value[index].marker.map((marker, idx) => {
       marker.remove();
-      return createMarker(color, points[index]);
+      return createMarker(color, points[idx]);
     });
 
     PolygonLayers.value[index].marker = Marker;
@@ -137,7 +137,11 @@ function changeColor({ index, length }) {
 
 function generateMapLines(groupCordinates) {
   const mapLines = [];
-  groupCordinates.forEach((coords) => {
+  //filter out ungrouped points
+  const filtered = groupCordinates.filter(
+    (coord) => coord.name !== "Ungrouped"
+  );
+  filtered.forEach((coords) => {
     const { group, name } = coords;
     const points = group.map((coord) => [coord.lng, coord.lat]);
     // you append first coord to the other coords to close the polygon
@@ -247,7 +251,24 @@ function attachLineData(lines) {
   });
 }
 
+function cleanUpOldPolygons(polygon) {
+  PolygonLayers.value.forEach((layer, index) => {
+    const found = polygon.find((item) => layer.name === item.name);
+    if (!found) {
+      map.value.removeLayer(`${layer.name}-line`);
+      map.value.removeLayer(`${layer.name}-fill`);
+      map.value.removeSource(layer.name);
+      layer.marker.forEach((point) => point.remove());
+      PolygonLayers.value.splice(index, 1);
+    }
+  });
+}
+
 function attachPolygonData(polygon) {
+  // clean up old polygonLayers
+  cleanUpOldPolygons(polygon);
+
+  // start new layers
   polygon.forEach((line, index) => {
     // get line data
     const { polygonCoords, name, points } = line;
@@ -279,6 +300,7 @@ function attachPolygonData(polygon) {
       paint: {
         "line-width": 2,
         "line-color": groupColors.value[index],
+        "line-opacity": 0.8,
       },
     };
     // add line layer
@@ -384,6 +406,15 @@ function clearPoint() {
     map.value.removeSource(layer.name);
     layer.marker.forEach((point) => point.remove());
   });
+
+  LineLayers.value.forEach((layer) => {
+    map.value.removeLayer(`${layer.name}-line`);
+    map.value.removeSource(layer.name);
+    layer.marker.forEach((point) => point.remove());
+  });
+
+  PolygonLayers.value = [];
+  LineLayers.value = [];
 }
 
 function changePointName(pointName) {
@@ -510,5 +541,6 @@ export default {
   cursor: pointer;
   width: 12px;
   height: 12px;
+  opacity: 0.4;
 }
 </style>

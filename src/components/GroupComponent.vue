@@ -1,6 +1,6 @@
 <script setup>
 const emit = defineEmits(["changeColor", "changePointName"]);
-defineProps({
+const props = defineProps({
   coord: {
     type: Object,
     required: true,
