@@ -17,7 +17,6 @@ const coordinates = ref([]);
 const maxDistance = ref(0);
 const groupColors = ref([]);
 const PolygonLayers = ref([]);
-const LineLayers = ref([]);
 
 function createCoordinates(coords) {
   const { lng, lat } = coords;
@@ -90,47 +89,24 @@ function changeColor({ index, length }) {
       "fill-color",
       color
     );
-
-    //change line color
-    map.value.setPaintProperty(
-      `${PolygonLayers.value[index].name}-line`,
-      "line-color",
-      color
-    );
-
-    // need points to place the markers
-    const points = PolygonLayers.value[index].points;
-
-    // change Marker color
-    const Marker = PolygonLayers.value[index].marker.map((marker, idx) => {
-      marker.remove();
-      return createMarker(color, points[idx]);
-    });
-
-    PolygonLayers.value[index].marker = Marker;
-
-    return;
-  } else {
-    // /change line color
-    map.value.setPaintProperty(
-      `${LineLayers.value[index - polygonCoordsLength.value].name}-line`,
-      "line-color",
-      color
-    );
-
-    // need points to place the markers
-    const points = LineLayers.value[index - polygonCoordsLength.value].points;
-
-    // change Marker color
-    const Marker = LineLayers.value[
-      index - polygonCoordsLength.value
-    ].marker.map((marker, idx) => {
-      marker.remove();
-      return createMarker(color, points[idx]);
-    });
-
-    LineLayers.value[index - polygonCoordsLength.value].marker = Marker;
   }
+  //change line color
+  map.value.setPaintProperty(
+    `${PolygonLayers.value[index].name}-line`,
+    "line-color",
+    color
+  );
+
+  // need points to place the markers
+  const points = PolygonLayers.value[index].points;
+
+  // change Marker color
+  const Marker = PolygonLayers.value[index].marker.map((marker, idx) => {
+    marker.remove();
+    return createMarker(color, points[idx]);
+  });
+
+  PolygonLayers.value[index].marker = Marker;
 }
 
 // form array to be used for mapbox layers
@@ -151,27 +127,17 @@ function generateMapLines(groupCordinates) {
   });
 
   // we filter because you can form any shape without at least 4 points
-
-  return {
-    polygons: mapLines
-      .filter((item) => item.polygonCoords.length > 3)
-      .map((item) => ({
-        name: item.name,
-        polygonCoords: polygon([item.polygonCoords]),
-        points: item.points,
-        markers: item.markers,
-      })),
-    lines: mapLines
-      .filter(
-        (item) => item.polygonCoords.length < 4 && item.polygonCoords.length > 2
-      )
-      .map((item) => ({
-        name: item.name,
-        polygonCoords: lineString(item.polygonCoords),
-        points: item.points,
-        markers: item.markers,
-      })),
-  };
+  return mapLines
+    .filter((item) => item.polygonCoords.length > 2)
+    .map((item) => ({
+      name: item.name,
+      polygonCoords:
+        item.polygonCoords.length > 3
+          ? polygon([item.polygonCoords])
+          : lineString(item.polygonCoords),
+      points: item.points,
+      markers: item.markers,
+    }));
 }
 
 //create marker for each point
@@ -194,99 +160,22 @@ function drawLines(groupCordinates) {
   const mapLines = generateMapLines(groupCordinates);
   // loop though each group and draw the lines
 
-  const { polygons, lines } = mapLines;
-
-  // create polygons
-  attachPolygonData(polygons);
-
-  // create lines
-  attachLineData(lines);
+  drawPolygons(mapLines);
 }
 
-function attachLineData(lines) {
-  // null check
-  if (lines.length === 0) {
-    if (LineLayers.value.length === 0) {
-      return;
-    }
-    // else remove all lines
-    LineLayers.value.forEach((layer) => {
-      layer.marker.forEach((marker) => marker.remove());
-    });
-    LineLayers.value = [];
-  }
+function drawPolygons(polygons) {
+  //cleanup old polygons
+  cleanUpOldPolygons();
 
-  // get line data
+  polygons.forEach((polygon, index) => {
+    const { polygonCoords, name, points, markers } = polygon;
+    //spread polygon object
 
-  lines.forEach((line, index) => {
-    const { polygonCoords, name, points, markers } = line;
-    const marker = points.map((point) => {
-      // create marker
-      return createMarker(
-        groupColors.value[index + (groupCordinates.value.length - 1)],
-        point
-      );
-    });
-    // add polygoncoords as source
-    const source = polygonCoords;
-
-    if (map.value.getSource(name)) {
-      return map.value.getSource(name).setData(source);
-    }
-    // add source to map
-    map.value.addSource(name, {
-      type: "geojson",
-      data: source,
-    });
-
-    let lineLayer = null;
-
-    //create layer
-    lineLayer = {
-      id: `${name}-line`,
-      type: "line",
-      source: name,
-      paint: {
-        "line-width": 2,
-        "line-color": groupColors.value[groupCordinates.value.length - 1],
-      },
-    };
-    // add line layer
-    map.value.addLayer(lineLayer);
-
-    //push details into layers so you can track
-    LineLayers.value.push({ name, lineLayer, marker, points });
-    removeMakers(markers);
-  });
-}
-
-function cleanUpOldPolygons(polygon) {
-  PolygonLayers.value.forEach((layer, index) => {
-    const found = polygon.find((item) => layer.name === item.name);
-    if (!found) {
-      map.value.removeLayer(`${layer.name}-line`);
-      map.value.removeLayer(`${layer.name}-fill`);
-      map.value.removeSource(layer.name);
-      layer.marker.forEach((point) => point.remove());
-      PolygonLayers.value.splice(index, 1);
-    }
-  });
-}
-
-function attachPolygonData(polygon) {
-  // clean up old polygonLayers
-  cleanUpOldPolygons(polygon);
-
-  // start new layers
-  polygon.forEach((line, index) => {
-    // get line data
-    const { polygonCoords, name, points, markers } = line;
-
+    //create Marker
     const marker = points.map((point) => {
       // create marker
       return createMarker(groupColors.value[index], point);
     });
-    // add polygoncoords as source
     const source = polygonCoords;
     // check if source exists then update data
     if (map.value.getSource(name)) {
@@ -315,23 +204,45 @@ function attachPolygonData(polygon) {
     // add line layer
     map.value.addLayer(lineLayer);
 
-    fillLayer = {
-      id: `${name}-fill`,
-      type: "fill",
-      source: name,
-      paint: {
-        "fill-color": groupColors.value[index],
-        "fill-opacity": 0.4,
-      },
-    };
-
-    //add fill layer to map
-    map.value.addLayer(fillLayer);
+    if (points.length > 2) {
+      fillLayer = {
+        id: `${name}-fill`,
+        type: "fill",
+        source: name,
+        paint: {
+          "fill-color": groupColors.value[index],
+          "fill-opacity": 0.4,
+        },
+      };
+      //add fill layer to map
+      map.value.addLayer(fillLayer);
+    }
 
     //push details into layers so you can track
     PolygonLayers.value.push({ name, lineLayer, fillLayer, marker, points });
     removeMakers(markers);
   });
+}
+
+function cleanUpOldPolygons() {
+  PolygonLayers.value.forEach((layer) => {
+    // const found = polygon.find((item) => layer.name === item.name);
+    // if (!found) {
+    if (map.value.getLayer(`${layer.name}-line`)) {
+      map.value.removeLayer(`${layer.name}-line`);
+    }
+    if (map.value.getLayer(`${layer.name}-fill`)) {
+      map.value.removeLayer(`${layer.name}-fill`);
+    }
+    if (map.value.getSource(layer.name)) {
+      map.value.removeSource(layer.name);
+    }
+
+    layer.marker.forEach((point) => point.remove());
+
+    // }
+  });
+  PolygonLayers.value = [];
 }
 
 // group coordinates based on distance
@@ -396,11 +307,6 @@ const groupCordinates = computed(() => {
   return combined;
 });
 
-//check length of polygons coords
-const polygonCoordsLength = computed(() => {
-  return groupCordinates.value.filter((item) => item.group.length > 2).length;
-});
-
 function clearPoint() {
   // clear markers
   coordinates.value.forEach((item) => {
@@ -411,20 +317,21 @@ function clearPoint() {
 
   //remove source
   PolygonLayers.value.forEach((layer) => {
-    map.value.removeLayer(`${layer.name}-line`);
-    map.value.removeLayer(`${layer.name}-fill`);
-    map.value.removeSource(layer.name);
-    layer.marker.forEach((point) => point.remove());
-  });
+    if (map.value.getLayer(`${layer.name}-line`)) {
+      map.value.removeLayer(`${layer.name}-line`);
+    }
+    if (map.value.getLayer(`${layer.name}-fill`)) {
+      map.value.removeLayer(`${layer.name}-fill`);
+    }
 
-  LineLayers.value.forEach((layer) => {
-    map.value.removeLayer(`${layer.name}-line`);
-    map.value.removeSource(layer.name);
+    if (map.value.getSource(layer.name)) {
+      map.value.removeSource(layer.name);
+    }
+
     layer.marker.forEach((point) => point.remove());
   });
 
   PolygonLayers.value = [];
-  LineLayers.value = [];
 }
 
 function changePointName(pointName) {
@@ -551,6 +458,5 @@ export default {
   cursor: pointer;
   width: 12px;
   height: 12px;
-  opacity: 0.5;
 }
 </style>
