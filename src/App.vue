@@ -144,9 +144,10 @@ function generateMapLines(groupCordinates) {
   filtered.forEach((coords) => {
     const { group, name } = coords;
     const points = group.map((coord) => [coord.lng, coord.lat]);
+    const markers = group.map((coord) => coord.marker);
     // you append first coord to the other coords to close the polygon
     const polygonCoords = [...points, points[0]];
-    mapLines.push({ polygonCoords, name, points });
+    mapLines.push({ polygonCoords, name, points, markers });
   });
 
   // we filter because you can form any shape without at least 4 points
@@ -158,6 +159,7 @@ function generateMapLines(groupCordinates) {
         name: item.name,
         polygonCoords: polygon([item.polygonCoords]),
         points: item.points,
+        markers: item.markers,
       })),
     lines: mapLines
       .filter(
@@ -167,6 +169,7 @@ function generateMapLines(groupCordinates) {
         name: item.name,
         polygonCoords: lineString(item.polygonCoords),
         points: item.points,
+        markers: item.markers,
       })),
   };
 }
@@ -178,6 +181,11 @@ function createMarker(color, lngLat) {
   el.style.border = `4px solid ${color}`;
 
   return new mapboxgl.Marker(el).setLngLat(lngLat).addTo(map.value);
+}
+
+//remove markers
+function removeMakers(markers) {
+  markers.forEach((marker) => marker.remove());
 }
 
 // draw Map lines
@@ -211,7 +219,7 @@ function attachLineData(lines) {
   // get line data
 
   lines.forEach((line, index) => {
-    const { polygonCoords, name, points } = line;
+    const { polygonCoords, name, points, markers } = line;
     const marker = points.map((point) => {
       // create marker
       return createMarker(
@@ -248,6 +256,7 @@ function attachLineData(lines) {
 
     //push details into layers so you can track
     LineLayers.value.push({ name, lineLayer, marker, points });
+    removeMakers(markers);
   });
 }
 
@@ -271,7 +280,7 @@ function attachPolygonData(polygon) {
   // start new layers
   polygon.forEach((line, index) => {
     // get line data
-    const { polygonCoords, name, points } = line;
+    const { polygonCoords, name, points, markers } = line;
 
     const marker = points.map((point) => {
       // create marker
@@ -321,6 +330,7 @@ function attachPolygonData(polygon) {
 
     //push details into layers so you can track
     PolygonLayers.value.push({ name, lineLayer, fillLayer, marker, points });
+    removeMakers(markers);
   });
 }
 
@@ -541,6 +551,5 @@ export default {
   cursor: pointer;
   width: 12px;
   height: 12px;
-  opacity: 0.4;
 }
 </style>
