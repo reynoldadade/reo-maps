@@ -551,5 +551,6 @@ export default {
   cursor: pointer;
   width: 12px;
   height: 12px;
+  opacity: 0.5;
 }
 </style>
